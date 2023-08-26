@@ -1,0 +1,27 @@
+- hosts: masters,nodes
+  become: yes
+
+  vars:
+    username: "kube"
+    password: "kubeP@$$"  
+
+  tasks:
+    - name: Create the user
+      ansible.builtin.user:
+        name: "{{ username }}"
+        state: present
+        createhome: yes
+
+    - name: Set password for the user
+      ansible.builtin.shell: echo "{{ username }}:{{ password }}" | chpasswd
+
+    - name: allow '{{ username }}' to use sudo without needing a password
+      lineinfile:
+        dest: /etc/sudoers
+        line: '{{ username }} ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+
+    - name: set up authorized keys for the {{ username }} user
+      authorized_key: user={{ username }} key="{{item}}"
+      with_file:
+        - ~/.ssh/id_rsa.pub

@@ -1,0 +1,195 @@
+---
+- name: Install K8S Cluster Playbook
+  hosts: masters,nodes
+  become: yes
+  become_method: sudo
+  gather_facts: yes
+  connection: ssh
+
+  vars:
+    # # vagrant
+    # master_ip: "192.168.50.1"
+    # node1_ip: "192.168.50.2"
+    # node2_ip: "192.168.50.3"
+
+    # prod
+    master_ip: "45.73.61.59"
+    node1_ip: "45.73.61.56"
+    node2_ip: "45.73.61.57"
+
+  tasks:
+    ########################################
+    # update apt
+    ########################################
+    - name: Update and upgrade apt packages
+      become: true
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 3600 
+
+
+    ########################################
+    # Disable swap
+    ########################################
+    - name: Disable swap
+      shell: |
+        sudo swapoff -a
+        sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+
+    ########################################
+    # Add IP address of master to hosts
+    ########################################
+    - name: Add IP address of master to hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ master_ip }}     master"
+        state: present
+
+    - name: Add IP address of node1 to hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ node1_ip }}     node1"
+        state: present
+
+    - name: Add IP address of node2 to hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ node2_ip }}     node2"
+        state: present
+
+
+
+    ########################################
+    # Install docker
+    ########################################
+    - name: Install docker
+      become: true
+      apt:
+        name: docker.io
+        state: present
+
+
+
+    ########################################
+    # kubectl kubeadm kubelet
+    ########################################
+    - name: Install apt-transport-https curl
+      become: true
+      apt:
+        update_cache: yes
+        name:
+          - apt-transport-https
+          - curl
+        state: present
+
+    - name: Add GPG Key for Kubernetes APT Repository
+      shell: curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+      args:
+        executable: /bin/bash
+
+    - name: Add Kubernetes APT Repository
+      blockinfile:
+        path: /etc/apt/sources.list.d/kubernetes.list
+        create: yes
+        block: |
+          deb http://apt.kubernetes.io/ kubernetes-xenial main
+
+    - name: Update APT Cache After Adding Repository
+      apt:
+        update_cache: yes
+
+    - name: Install Kubernetes Tools
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+
+    - name: Modify kubelet.service Configuration
+      lineinfile:
+        path: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+        line: 'Environment="cgroup-driver=systemd/cgroup-driver=cgroupfs"'
+      notify:
+        - Restart kubelet
+
+  # handlers:
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+
+
+       
+
+
+    ########################################################################################################################
+    ########################################################################################################################
+    # init cluster
+    ########################################################################################################################
+    ########################################################################################################################
+    - name: Initialize the cluster
+      when: inventory_hostname in groups['masters']
+      shell: kubeadm init --apiserver-advertise-address={{ master_ip }} --pod-network-cidr=192.168.0.0/16 
+      args:
+        chdir: $HOME
+
+    - name: create .kube directory
+      when: inventory_hostname in groups['masters']
+      become: yes
+      become_user: kube
+      file:
+        path: $HOME/.kube
+        state: directory
+        mode: 0755
+
+    - name: copies admin.conf to user's kube config
+      when: inventory_hostname in groups['masters']
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/kube/.kube/config
+        remote_src: yes
+        owner: kube
+
+    - name: Install Pod network
+      when: inventory_hostname in groups['masters']
+      become: yes
+      become_user: kube
+      shell: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+      args:
+        chdir: $HOME
+
+    - name: Get the token for joining the worker nodes
+      when: inventory_hostname in groups['masters']
+      become: yes
+      become_user: kube
+      shell: kubeadm token create --print-join-command
+      register: kubernetes_join_command
+
+    - name: Master Debug message
+      when: inventory_hostname in groups['masters']
+      debug:
+        msg: "{{ kubernetes_join_command.stdout_lines[0] }}"
+
+    - name: Nodes Debug message
+      when: inventory_hostname in groups['nodes']
+      debug:
+        msg: "{{ hostvars[groups['masters'].0].kubernetes_join_command.stdout_lines[0] }}"
+
+
+
+
+    #######################################################################################################################
+    #######################################################################################################################
+    # link nodes
+    #######################################################################################################################
+    #######################################################################################################################
+    - name: Join Nodes to the cluster
+      when: inventory_hostname in groups['nodes']
+      become_user: root
+      ansible.builtin.shell: "{{ hostvars[groups['masters'].0].kubernetes_join_command.stdout_lines[0] }}"
+      args:
+        executable: /bin/bash
+

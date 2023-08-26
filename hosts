@@ -1,0 +1,25 @@
+# prod
+[masters]
+master ansible_host=45.73.61.59 ansible_user=root
+
+[nodes]
+node1 ansible_host=45.73.61.56 ansible_user=root
+node2 ansible_host=45.73.61.57 ansible_user=root
+
+# # vagrant
+# [masters]
+# 192.168.50.1:22 ansible_ssh_user=vagrant ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+# 
+# [nodes]
+# 192.168.50.2:22 ansible_ssh_user=vagrant ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+# 192.168.50.3:22 ansible_ssh_user=vagrant ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+
+
+# to check for host connection
+
+# if there is ssh key installed
+# ansible -i hosts all -m ping
+
+# to use password authentication
+# ansible -i hosts all -m ping  --ask-pass
