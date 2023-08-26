@@ -8,14 +8,16 @@
 
   vars:
     # # vagrant
-    # master_ip: "192.168.50.1"
-    # node1_ip: "192.168.50.2"
-    # node2_ip: "192.168.50.3"
+    # machiens_ips:
+      # - { ip: "192.168.50.1", name: "master" }
+      # - { ip: "192.168.50.2", name: "node1" }
+      # - { ip: "192.168.50.3", name: "node2" }
 
     # prod
-    master_ip: "45.73.61.59"
-    node1_ip: "45.73.61.56"
-    node2_ip: "45.73.61.57"
+    machiens_ips:
+      - { ip: "45.73.61.59", name: "ansible-master" }
+      - { ip: "45.73.61.56", name: "ansible-node1" }
+      - { ip: "45.73.61.57", name: "ansible-node2" }
 
   tasks:
     ########################################
@@ -38,26 +40,17 @@
         sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
 
-    ########################################
-    # Add IP address of master to hosts
-    ########################################
-    - name: Add IP address of master to hosts
-      lineinfile:
-        path: /etc/hosts
-        line: "{{ master_ip }}     master"
-        state: present
-
-    - name: Add IP address of node1 to hosts
-      lineinfile:
-        path: /etc/hosts
-        line: "{{ node1_ip }}     node1"
-        state: present
-
-    - name: Add IP address of node2 to hosts
-      lineinfile:
-        path: /etc/hosts
-        line: "{{ node2_ip }}     node2"
-        state: present
+    # ########################################
+    # # Add IP address of master to hosts
+    # ########################################
+    # - name: Add IP addresses and names to hosts file for master and nodes machiens
+    #   lineinfile:
+    #     path: /etc/hosts
+    #     line: "{{ item.ip }}     {{ item.name }}"
+    #     state: present
+    #   loop: "{{ machiens_ips }}"
+    #   loop_control:
+    #     loop_var: item
 
 
 
@@ -173,11 +166,6 @@
       debug:
         msg: "{{ kubernetes_join_command.stdout_lines[0] }}"
 
-    - name: Nodes Debug message
-      when: inventory_hostname in groups['nodes']
-      debug:
-        msg: "{{ hostvars[groups['masters'].0].kubernetes_join_command.stdout_lines[0] }}"
-
 
 
 
@@ -186,6 +174,11 @@
     # link nodes
     #######################################################################################################################
     #######################################################################################################################
+    - name: Nodes Debug message
+      when: inventory_hostname in groups['nodes']
+      debug:
+        msg: "{{ hostvars[groups['masters'].0].kubernetes_join_command.stdout_lines[0] }}"
+
     - name: Join Nodes to the cluster
       when: inventory_hostname in groups['nodes']
       become_user: root
